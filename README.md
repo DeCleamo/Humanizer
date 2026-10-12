@@ -1,4 +1,4 @@
-# Turnitout — Text & DOCX Humanizer Portal
+# PGTurn — Text & DOCX Humanizer Portal
 
 A clean, practical, fast, and 100% private in-browser portal for humanizing AI text and Word documents (`.docx`).
 

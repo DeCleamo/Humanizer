@@ -1,8 +1,8 @@
-# Privacy Policy — Turnitout
+# Privacy Policy — PGTurn
 
 **Effective Date:** 2026
 
-At **Turnitout**, we are committed to complete privacy and data confidentiality.
+At **PGTurn**, we are committed to complete privacy and data confidentiality.
 
 ## 1. Zero Server Storage & Complete In-Memory Processing
 All documents (`.docx`, `.txt`, `.tex`, code files) and text inputs are processed **strictly in-memory inside your local browser**. No documents or text are ever uploaded to any database, cloud storage, or external server.
