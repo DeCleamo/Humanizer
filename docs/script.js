@@ -1083,6 +1083,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const anchorPool = FOCAL_ANCHORS[tone] || FOCAL_ANCHORS.academic;
 
     const processedParas = paragraphs.map(para => {
+      // If paragraph contains multiple lines with colons or bullet points, preserve line breaks
+      if (para.includes("\n")) {
+        const lines = para.split(/\n/);
+        return lines.map(line => {
+          const s = line.trim();
+          if (!s || s.length < 25 || s.endsWith(":") || /^[A-Za-z0-9\s/-]+:\s+/.test(s)) return line;
+          return line;
+        }).join("\n");
+      }
       let sentences = splitSentences(para);
       if (sentences.length < 2) return para;
 
@@ -1142,13 +1151,7 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         }
 
-        // Add a concise focal anchor if still too flat and paragraph has >= 3 sentences
-        if (sentences.length >= 3 && Math.random() < 0.65) {
-          const anchor = pick(anchorPool);
-          const insertPos = Math.min(sentences.length - 1, Math.max(1, Math.floor(sentences.length / 2)));
-          sentences.splice(insertPos, 0, anchor);
-          burstsAdded++;
-        }
+        // Real entropy achieved through natural splitting and internal qualifiers without artificial sentence injection
       }
 
       return sentences.join(" ");
@@ -1166,6 +1169,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const processedParas = paragraphs.map(para => {
       if (para.trim().length < 25) return para;
+      if (para.includes("\n")) {
+        const lines = para.split("\n");
+        return lines.map(line => {
+          if (line.trim().length < 20 || line.trim().endsWith(":")) return line;
+          return restructureSyntax(line, intensity).text;
+        }).join("\n");
+      }
       const sentences = splitSentences(para);
       if (sentences.length === 0) return para;
 
@@ -1274,6 +1284,10 @@ document.addEventListener("DOMContentLoaded", () => {
     ];
 
     const processedParas = paragraphs.map(para => {
+      if (para.includes("\n")) {
+        const lines = para.split("\n");
+        return lines.map(line => diversifyConnectors(line).text).join("\n");
+      }
       const sentences = splitSentences(para);
       const out = sentences.map(sentence => {
         for (const p of patterns) {
@@ -1519,9 +1533,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const connectors = diversifyConnectors(text);
     text = connectors.text;
 
-    // 15.5. Universal sentence guarantee sweep (100% sentence transformation guarantee)
-    const guarantee = guaranteeAllSentencesTransformed(rawText, text);
-    text = guarantee.text;
+    // 15.5. Pipeline clean (no artificial prefix injection)
 
     // 16. Unshield protected tokens
     text = unshieldSyntax(text, syntaxTokens);
@@ -1536,7 +1548,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const originalScore = estimateAIScore(rawText);
     const humanizedScore = estimateAIScore(text);
 
-    const totalChanges = clicheCount + restructure.restructuredCount + vocab.vocabSwaps + burst.burstsAdded + connectors.diversifiedCount + (guarantee ? guarantee.guaranteedCount : 0);
+    const totalChanges = clicheCount + restructure.restructuredCount + vocab.vocabSwaps + burst.burstsAdded + connectors.diversifiedCount;
 
     return {
       cleanText: text,
@@ -2299,6 +2311,7 @@ Consequently, the establishment of robust evaluation frameworks is paramount. Th
         const totalParas = paragraphs.length;
 
         for (let i = 0; i < paragraphs.length; i++) {
+          const p = paragraphs[i];
           const pct = Math.round(((i + 1) / totalParas) * 100);
           docxProgressBar.style.width = pct + "%";
           docxProgressText.textContent = `Humanizing paragraph ${i + 1} of ${totalParas}...`;
@@ -2307,7 +2320,28 @@ Consequently, the establishment of robust evaluation frameworks is paramount. Th
             await new Promise(r => setTimeout(r, 10));
           }
 
-          const textNodes = paragraphs[i].getElementsByTagName("w:t");
+          // 1. Check if paragraph is inside a table (w:tc)
+          let isTable = false;
+          let node = p.parentNode;
+          while (node && node.nodeName !== "#document") {
+            if (node.nodeName === "w:tc" || node.nodeName === "w:tbl") {
+              isTable = true;
+              break;
+            }
+            node = node.parentNode;
+          }
+
+          // 2. Check if paragraph has heading/title style
+          const pStyle = p.getElementsByTagName("w:pStyle")[0];
+          let isHeading = false;
+          if (pStyle) {
+            const val = (pStyle.getAttribute("w:val") || "").toLowerCase();
+            if (val.includes("heading") || val.includes("title") || val.includes("subtitle") || val.includes("caption") || val.includes("header") || val.includes("footer") || val.includes("toc")) {
+              isHeading = true;
+            }
+          }
+
+          const textNodes = p.getElementsByTagName("w:t");
           if (textNodes.length === 0) continue;
 
           let fullPText = "";
@@ -2315,8 +2349,31 @@ Consequently, the establishment of robust evaluation frameworks is paramount. Th
             fullPText += textNodes[j].textContent;
           }
 
-          if (!fullPText.trim()) continue;
+          const trimmed = fullPText.trim();
+          if (!trimmed) continue;
 
+          const words = trimmed.split(/\s+/).filter(Boolean);
+
+          // 3. STRICT PROTECTION SHIELDS (Never corrupt document layout, metadata, or titles):
+          // A. Table cells with metadata or short content (< 25 words): NEVER touch student names, IDs, dates, marks, labels!
+          if (isTable && words.length < 25) continue;
+
+          // B. Headings, titles, subtitles, headers, footers
+          if (isHeading) continue;
+
+          // C. Document title or assignment header (< 10 words and no period)
+          if (words.length < 10 && !/[.!?]$/.test(trimmed)) continue;
+
+          // D. Section labels ending with colon ("Problem Identification:", "Requirements:")
+          if (trimmed.endsWith(":")) continue;
+
+          // E. Captions (Figure 1: ..., Table 1: ...)
+          if (/^(?:figure|fig\.|table|image|chart)\s+\d+/i.test(trimmed)) continue;
+
+          // F. Short metadata lines (< 8 words)
+          if (words.length < 8) continue;
+
+          // Only process genuine prose body paragraphs
           const result = humanizeText(fullPText, {
             intensity: getIntensityLevel(),
             tone: toneSelect ? toneSelect.value : "academic",
